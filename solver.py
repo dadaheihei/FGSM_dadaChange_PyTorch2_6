@@ -105,7 +105,7 @@ class Solver(object):
                 logit = self.net(x)
                 prediction = logit.max(1)[1]
 
-                correct = torch.eq(prediction, y).float().mean().data[0]
+                correct = torch.eq(prediction, y).float().mean().item()
                 cost = F.cross_entropy(logit, y)
 
                 self.optim.zero_grad()
@@ -117,7 +117,7 @@ class Solver(object):
                         print()
                         print(self.env_name)
                         print('[{:03d}:{:03d}]'.format(self.global_epoch, batch_idx))
-                        print('acc:{:.3f} loss:{:.3f}'.format(correct, cost.data[0]))
+                        print('acc:{:.3f} loss:{:.3f}'.format(correct, cost.item()))
 
 
                     if self.tensorboard:
@@ -128,7 +128,7 @@ class Solver(object):
                                             tag_scalar_dict={'train':1-correct},
                                             global_step=self.global_iter)
                         self.tf.add_scalars(main_tag='performance/cost',
-                                            tag_scalar_dict={'train':cost.data[0]},
+                                            tag_scalar_dict={'train':cost.item()},
                                             global_step=self.global_iter)
 
 
@@ -156,8 +156,8 @@ class Solver(object):
             logit = self.net(x)
             prediction = logit.max(1)[1]
 
-            correct += torch.eq(prediction, y).float().sum().data[0]
-            cost += F.cross_entropy(logit, y, size_average=False).data[0]
+            correct += torch.eq(prediction, y).float().sum().item()
+            cost += F.cross_entropy(logit, y, size_average=False).item()
             total += x.size(0)
 
         accuracy = correct / total
@@ -204,27 +204,32 @@ class Solver(object):
         x_adv, changed, values = self.FGSM(x_true, y_true, y_target, epsilon, alpha, iteration)
         accuracy, cost, accuracy_adv, cost_adv = values
 
-        save_image(x_true,
-                   self.output_dir.joinpath('legitimate(t:{},e:{},i:{}).jpg'.format(target,
-                                                                                    epsilon,
-                                                                                    iteration)),
-                   nrow=10,
-                   padding=2,
-                   pad_value=0.5)
-        save_image(x_adv,
-                   self.output_dir.joinpath('perturbed(t:{},e:{},i:{}).jpg'.format(target,
-                                                                                   epsilon,
-                                                                                   iteration)),
-                   nrow=10,
-                   padding=2,
-                   pad_value=0.5)
-        save_image(changed,
-                   self.output_dir.joinpath('changed(t:{},e:{},i:{}).jpg'.format(target,
-                                                                                 epsilon,
-                                                                                 iteration)),
-                   nrow=10,
-                   padding=3,
-                   pad_value=0.5)
+        filename_base = 't{}_e{:.2f}_i{}'.format(target, epsilon, iteration)
+
+        save_image(
+        x_true,
+        self.output_dir / f'legitimate_{filename_base}.jpg',
+        nrow=10,
+        padding=2,
+        pad_value=0.5
+            )
+
+        save_image(
+        x_adv,
+        self.output_dir / f'perturbed_{filename_base}.jpg',
+        nrow=10,
+        padding=2,
+        pad_value=0.5
+        )
+
+        save_image(
+        changed,
+        self.output_dir / f'changed_{filename_base}.jpg',
+        nrow=10,
+        padding=3,
+        pad_value=0.5
+        )
+
 
         if self.visdom:
             self.vf.imshow_multi(x_true.cpu(), title='legitimate', factor=1.5)
@@ -297,7 +302,8 @@ class Solver(object):
         self.set_mode('train')
 
         return x_adv.data, changed.data,\
-                (accuracy.data[0], cost.data[0], accuracy_adv.data[0], cost_adv.data[0])
+                (accuracy.item(), cost.item(), accuracy_adv.item(), cost_adv.item())
+
 
     def save_checkpoint(self, filename='ckpt.tar'):
         model_states = {
@@ -323,7 +329,7 @@ class Solver(object):
         file_path = self.ckpt_dir / filename
         if file_path.is_file():
             print("=> loading checkpoint '{}'".format(file_path))
-            checkpoint = torch.load(file_path.open('rb'))
+            checkpoint = torch.load(file_path.open('rb'), weights_only=False)
             self.global_epoch = checkpoint['epoch']
             self.global_iter = checkpoint['iter']
             self.history = checkpoint['history']
